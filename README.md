@@ -5,6 +5,6 @@ The module was written by David Benson (Northwestern University).
 
 A help file has been added to assist with the syntax and estimation options. 
 
-The module has two ado files which work together: IVCRC.ado is a shell, feeding commands to IVCRC_ESTIMATE_vs.ado which performs the computations. Users must load both for the module to work. There are two versions of the estimation routine. IVCRC_ESTIMATE_ONEVAR.ado is for the case of a single basic endogenous variable and is faster. IVCRC_ESTIMATE_MULTIVAR.ado is for the case of multiple basic endogenous variables. Both allow arbitrary "derived endogenous" variables. 
+The module has two ado files which work together: IVCRC.ado is a wrapper, feeding commands to IVCRC_ESTIMATE_vs.ado which performs the computations. Users must load both for the module to work. There are two versions of the estimation routine. IVCRC_ESTIMATE_ONEVAR.ado is for the case of a single basic endogenous variable and is faster. IVCRC_ESTIMATE_MULTIVAR.ado is for the case of multiple basic endogenous variables. Both allow arbitrary "derived endogenous" variables. 
 
 
