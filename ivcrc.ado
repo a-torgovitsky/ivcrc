@@ -10,7 +10,9 @@ program ivcrc, eclass
 				  QUantiles(integer 100)			///
 				  BANDwidth(numlist)				///
 				  BOOTstrap(string)					///
-				  NORMal							///				  				  
+				  NORMal							///		
+  				  DENDOG(varlist)					///
+				  VARCOEF(string)					/// 
 				  Kernel(string) *]
 
 			
