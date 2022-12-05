@@ -27,8 +27,8 @@ local kendog : word count `endog'
 tempvar rankstat 
 tempname beta subbeta smtb bsub bbw			
 marksample touse
-markout `touse' `lhs' `exog' `inst' `endog' `dendog'	
-if trim("`bandwidth'") == "" local bandwidth .05 
+markout `touse' `lhs' `exog' `inst' `endog' `dendog'
+if trim("`bandwidth'")=="" & trim("`bootstrap'")!="" & trim("`varcoef'")=="" local only_bw "1"
 if trim("`average'")=="" local average "0(0)1"
 mata: aveparse("`average'")	
 if `kendog'==1 & `ascendflag'>0 {
@@ -60,16 +60,30 @@ markout `touse' `lhs' `exog' `varcoef'
 mata: aveparse("`average'")	
 }		
 	
+** IF BOOTSTRAP & NO BANDWIDTH - 1ST ESTIMATE ROT BANDWIDTH	
+if "`only_bw'"=="1" {
 	
+if "`userank'"=="" {	
+qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap')
+}
+else qui gen `rankstat' = `userank' if `touse'
+mata: ivcrc_rotbw("`lhs'", "`endog'", "`dendog' `exog'", "`rankstat'","`touse'")
+ereturn scalar rotbw = `bandwidth'
+
+}	
 	
 ** SAMPLE AVERAGE METHOD 
-if "`sampleave'"=="1" & `kendog'==1 & trim("`varcoef'")=="" {
+if "`sampleave'"=="1" & `kendog'==1 & trim("`varcoef'")=="" & "`only_bw'"=="" {
 
 if "`userank'"=="" {	
 display in gr "(estimating the conditional rank of `endog')"  	
 qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap')
 }
 else qui gen `rankstat' = `userank' if `touse'
+if trim("`bandwidth'") == "" {
+dis in gr "(estimating rule-of-thumb bandwidth)"
+mata: ivcrc_rotbw("`lhs'", "`endog'", "`dendog' `exog'", "`rankstat'","`touse'")
+}
 dis in gr "(estimating beta(r) at each r[i] rank in the sample)" 
 mata: ivcrc_beta_onevar("`lhs'","`endog' `dendog' `exog'","`rankstat'","`touse'")
 qui count if `touse'==1		
@@ -80,7 +94,7 @@ ereturn local cmd "ivcrc"
 	
 
 ** SAMPLE AVERAGE METHOD -- multiple basic endogenous variables
-if "`sampleave'"=="1" & `kendog'>1 & trim("`varcoef'")=="" {
+if "`sampleave'"=="1" & `kendog'>1 & trim("`varcoef'")=="" & "`only_bw'"==""  {
 
 if "`userank'"=="" {
 foreach v of varlist `endog' { 	
@@ -100,6 +114,10 @@ foreach v of varlist `endog' {
 	if "`savecoef'"!="" local ranknames = "`ranknames' rank_`v'"
 }	
 }
+if trim("`bandwidth'") == "" {
+dis in gr "(estimating rule-of-thumb bandwidth)"
+mata: ivcrc_rotbw("`lhs'", "`endog'", "`dendog' `exog'", "`ranklist'","`touse'")
+}
 dis in gr "(estimating beta(r) at each r[i] rank vector in the sample)" 
 mata: ivcrc_beta_multivar("`lhs'","`endog' `dendog' `exog'","`ranklist'","`touse'")
 qui count if `touse'==1		
@@ -110,13 +128,17 @@ ereturn local cmd "ivcrc"
 
 	
 ** GRID METHOD 	
-if "`sampleave'"=="" & `kendog'==1 & trim("`varcoef'")=="" {
+if "`sampleave'"=="" & `kendog'==1 & trim("`varcoef'")=="" & "`only_bw'"==""  {
 
 if "`userank'"=="" {	
 display in gr "(estimating the conditional rank of `endog')"  	
 qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap')
 }
 else qui gen `rankstat' = `userank' if `touse'
+if trim("`bandwidth'") == "" {
+dis in gr "(estimating rule-of-thumb bandwidth)"
+mata: ivcrc_rotbw("`lhs'", "`endog'", "`dendog' `exog'", "`rankstat'","`touse'")
+}
 dis in gr "(estimating beta(r) at specified grid points r)" 
 mata: ivcrc_beta_grid("`lhs'","`endog' `dendog' `exog'","`rankstat'","`touse'")
 qui count if `touse'==1	
@@ -578,6 +600,38 @@ else if ( (strtoreal(st_local("nsubsets"))>1) & (strtoreal(st_local("subsetcoef"
 if (st_local("savecoef")!="") stata(sprintf("file close %s",st_local("ivcrc_coef")))
 }
 end
+
+
+
+
+mata:
+function ivcrc_rotbw(yvar, endovars, othvars, rankvars, tousevar)
+{
+Y = st_data( . , (yvar) , tousevar )
+beX = st_data( . , (endovars) , tousevar )
+R   = st_data( . , (rankvars) , tousevar )
+if (strtrim(othvars)!="") othX = ( st_data( . , (othvars) , tousevar ) , J(rows(R),1,1) )
+else if (strtrim(othvars)=="")  othX = J(rows(R),1,1) 
+
+nlRX = ( (R:^2):*beX , (R:^3):*beX , (R:^4):*beX , R:*beX , beX  , othX )
+for(r=1;r<=cols(R);r++) {
+	nlRX = (nlRX , R[.,r]:*othX , (R[.,r]:^2):*othX , (R[.,r]:^3):*othX , (R[.,r]:^4):*othX )
+}
+glob_coef = invsym(cross(nlRX,nlRX))*cross(nlRX,Y)
+for(r=1;r<=cols(R);r++) {  	
+	if (r==1) glob_2dr = cross( ( ( beX[.,r] , 3:*R[.,r]:*beX[.,r] , 6:*(R[.,r]:^2):*beX[.,r] ) * (glob_coef[(r, r + cols(R), r + 2*cols(R))]) ):^2 , J(rows(Y),1,1) ) / rows(Y) 	
+	if (r>1) glob_2dr = ( glob_2dr , cross( ( ( beX[.,r] , 3:*R[.,r]:*beX[.,r] , 6:*(R[.,r]:^2):*beX[.,r] ) * (glob_coef[(r, r + cols(R), r + 2*cols(R))]) ):^2 , J(rows(Y),1,1) ) / rows(Y) )	
+}
+glob_sigsq = cross( (Y - nlRX*invsym(cross(nlRX,nlRX))*cross(nlRX,Y)):^2 , J(rows(Y),1,1) ) / rows(Y)
+rot_bw = 0.58 :* ( glob_sigsq :/ (rows(Y):*glob_2dr) ):^(1/5)
+st_local("bandwidth", strofreal(rowmin(rot_bw)))
+if (cols(R)>1) st_matrix("rotbw",rot_bw)
+
+}
+end
+
+
+		
 
 
 

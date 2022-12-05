@@ -25,8 +25,13 @@ if (regexm("`0'","boot")==0 & regexm("`0'","bootstrap")==0) {
 }		
 else {
 
-	if "`generate'" != "" & "`bootstrap'" != "" display in gr "({bf:generate()} option ignored while bootstrapping...)"
-	bootstrap , `bootstrap' notable noheader: _ivcrc_estimator `0'
+	if "`generate'"!="" display in gr "({bf:generate()} option ignored while bootstrapping...)"
+	if "`bandwidth'"=="" {
+	display in gr "(estimating rule-of-thumb bandwidth)"
+	qui _ivcrc_estimator `0'
+	bootstrap , `bootstrap' notable noheader: _ivcrc_estimator `0' bandwidth(`e(rotbw)')
+	}
+	else bootstrap , `bootstrap' notable noheader: _ivcrc_estimator `0' 
 	ivcrc_display, boot(bs_table) 
 				
 }
