@@ -21,6 +21,8 @@ In Stata, type "ssc install ivcrc".  Or copy `ivcrc.ado`, `_ivcrc_estimator.ado`
 
 Please post problems or suggestions to the issue queue.
 
+If you are having issues with slow computation on large data sets, [check out this pull request](https://github.com/a-torgovitsky/ivcrc/pull/3#issue-3768861132).
+
 ## References
 
 Masten and Torgovitsky (2016) [Identification of Instrumental Variable Correlated Random Coefficients Models](https://doi.org/10.1162/REST_a_00603), _The Review of Economics and Statistics_ 98 (5), pp. 1001-1005
