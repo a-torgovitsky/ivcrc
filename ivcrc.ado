@@ -13,7 +13,8 @@ program ivcrc, eclass
    	DENDOG(varlist fv ts)				///
 	USERANK(varlist) 				///
 	SAVECOEF(string)				/// 
-	VARCOEF(string)  *]
+	VARCOEF(string)  ///
+	fastqr *]
 			
 if (regexm("`0'","boot")==0 & regexm("`0'","bootstrap")==0) {
 	

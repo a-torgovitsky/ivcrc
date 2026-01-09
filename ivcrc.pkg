@@ -1,0 +1,6 @@
+v 3
+d ivcrc Instrumental variables correlated random coefficients estimator
+d D. Benson, M. Masten, A. Torgovitsky 
+f ivcrc.ado 
+f _ivcrc_estimator.ado 
+f ivcrc.sthlp 

@@ -12,7 +12,8 @@ program _ivcrc_estimator, eclass
    	DENDOG(varlist fv ts)				///
 	USERANK(varlist) 				///
 	SAVECOEF(string)				/// 
-	VARCOEF(string)  *]
+	VARCOEF(string)  ///
+	fastqr *]
 
 ** Preliminaries
 if trim("`varcoef'")=="" {
@@ -64,7 +65,7 @@ mata: aveparse("`average'")
 if "`only_bw'"=="1" {
 	
 if "`userank'"=="" {	
-qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap')
+qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap') `fastqr'
 }
 else qui gen `rankstat' = `userank' if `touse'
 mata: ivcrc_rotbw("`lhs'", "`endog'", "`dendog' `exog'", "`rankstat'","`touse'")
@@ -77,7 +78,7 @@ if "`sampleave'"=="1" & `kendog'==1 & trim("`varcoef'")=="" & "`only_bw'"=="" {
 
 if "`userank'"=="" {	
 display in gr "(estimating the conditional rank of `endog')"  	
-qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap')
+qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap') `fastqr'
 }
 else qui gen `rankstat' = `userank' if `touse'
 if trim("`bandwidth'") == "" {
@@ -100,7 +101,7 @@ if "`userank'"=="" {
 foreach v of varlist `endog' { 	
 	display in gr "(estimating the conditional rank of `v')"
 	tempvar rankstat`v'  	
-	qui rank_estimate , rankvar(`rankstat`v'') endogvar(`v') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap')
+	qui rank_estimate , rankvar(`rankstat`v'') endogvar(`v') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap') `fastqr'
 	local ranklist = "`ranklist' `rankstat`v''"
 	if "`savecoef'"!="" local ranknames = "`ranknames' rank_`v'"
 }
@@ -132,7 +133,7 @@ if "`sampleave'"=="" & `kendog'==1 & trim("`varcoef'")=="" & "`only_bw'"==""  {
 
 if "`userank'"=="" {	
 display in gr "(estimating the conditional rank of `endog')"  	
-qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap')
+qui rank_estimate , rankvar(`rankstat') endogvar(`endog') instvar(`inst') exogvar(`exog') tousevar(`touse') ranks(`ranks') generate(`generate') bootstrap(`bootstrap') `fastqr'
 }
 else qui gen `rankstat' = `userank' if `touse'
 if trim("`bandwidth'") == "" {
@@ -192,17 +193,48 @@ program rank_estimate
 	TOUSEVAR(varlist)  			///
 	RANKS(integer 50)  			///
 	GENERATE(string)  			///
-	BOOTSTRAP(string)   * ] 
+	BOOTSTRAP(string)   ///
+	fastqr * ] 
 
-forval s = 1(1)`= `ranks' - 1' {
-	local ss = `s'/`ranks'
-	_qreg `endogvar' `instvar' `exogvar' if `tousevar', quantile(`ss') 
-	tempvar q_`s' ind_`s'
-	predict `q_`s'' if `tousevar'
-	gen `ind_`s'' = `q_`s''<=`endogvar' if `tousevar'
-	local ind_list `ind_list' `ind_`s''
+if "`fastqr'" == "fastqr" {
+	di as error "Warning: qrprocess 1-step method may differ from qreg in small samples"
+	
+	* Define quantiles based on number of ranks 
+	loc startqt = 1 / `ranks'
+	loc endqt = (`ranks' - 1) /  `ranks'
+	loc increment = 1 / `ranks'
+	
+	* Run one qrprocess call
+	qui qrprocess `endogvar' `instvar' `exogvar' if `tousevar', quantile(`startqt'(`increment')`endqt') vce(novar) method(1step)
+	predict ___q_  if `tousevar', rearranged(`startqt'(`increment')`endqt')
+	* Do not think there is a way to write predict with multiple variables to
+	* temporary variables so will use ___q_ as the stub and clean up after.
+	
+	* Calculate ranks 
+	capture {
+	loc ind_list 
+	forvalues s = 1(1)`= `ranks' - 1'{
+		tempvar ind_`s'
+		gen `ind_`s'' = ___q_`s' <= `endogvar'  if `tousevar'
+		local ind_list `ind_list' `ind_`s''
+	}
+	drop ___q_* // clean up non temporary files
+	
+	egen `rankvar' = rowmean(`ind_list') if `tousevar'
+	}
+	if _rc != 0 drop ___q_* // clean up non temporary variables if code fails
 }
-egen `rankvar' = rowmean(`ind_list') if `tousevar'
+else{
+	forval s = 1(1)`= `ranks' - 1' {
+		local ss = `s'/`ranks'
+		_qreg `endogvar' `instvar' `exogvar' if `tousevar', quantile(`ss') 
+		tempvar q_`s' ind_`s'
+		predict `q_`s'' if `tousevar'
+		gen `ind_`s'' = `q_`s''<=`endogvar' if `tousevar'
+		local ind_list `ind_list' `ind_`s''
+	}
+	egen `rankvar' = rowmean(`ind_list') if `tousevar'
+}
 	
 tokenize "`generate'", parse(",")
 if "`generate'" != "" & trim("`bootstrap'") == "" {
